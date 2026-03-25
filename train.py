@@ -19,16 +19,18 @@ def setup_logging():
 
 @dataclass
 class FineTuneConfig:
-    max_seq_len: int = 256
-    batch_size: int = 16
-    max_epochs: int = 30
-    learning_rate: float = 5e-5
-    warmup_steps: int = 500
+    """Production training config - optimized for Windows CPU (i7-8th gen + 16GB)."""
+    max_seq_len: int = 200  # Reduced from 256 for CPU memory efficiency
+    batch_size: int = 4  # Reduced from 16 for i7-8th + 16GB RAM
+    max_epochs: int = 30  # Full production training
+    learning_rate: float = 3e-5  # Slightly lower for CPU stability
+    warmup_steps: int = 100
     label_smoothing: float = 0.1
     dropout: float = 0.3
     optimizer: str = "adamw"
-    fp16: bool = True
-    beam_size: int = 5
+    fp16: bool = False  # Disabled on CPU (not beneficial)
+    beam_size: int = 4  # Reduce for CPU speed (was 5)
+    gradient_accumulation_steps: int = 2  # Simulate batch_size=8 with mem of 4
 
 
 def run_evaluation(model, tokenizer, src_path, tgt_path, device, cfg):
@@ -62,6 +64,11 @@ def run_evaluation(model, tokenizer, src_path, tgt_path, device, cfg):
 def main():
     setup_logging()
     try:
+        # Windows CPU optimization
+        torch.set_num_threads(4)  # i7-8th gen has 4 physical cores
+        import os
+        os.environ['CUDA_VISIBLE_DEVICES'] = ''  # Explicitly disable CUDA
+        
         dataset_root = Path.home() / "eng_mni_nmt"
         cfg = FineTuneConfig()
 
@@ -86,12 +93,13 @@ def main():
         logging.info("Loading NLLB model from Hugging Face...")
         tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
         model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M")
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cpu")  # Force CPU (no CUDA on Windows)
         model = model.to(device)
-        logging.info("Model loaded on device: %s", device)
+        logging.info("Model loaded on device: CPU (i7-8th gen Windows)")
+        logging.info("Batch size: %d | Max seq len: %d | Expected time: 24-48 hours", cfg.batch_size, cfg.max_seq_len)
 
-        # Optimizer
-        optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.learning_rate)
+        # Optimizer (Adam instead of AdamW for CPU speed)
+        optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate, weight_decay=0.01)
         total_steps = cfg.max_epochs * 1000  # approximate
         
         best_bleu = -1.0

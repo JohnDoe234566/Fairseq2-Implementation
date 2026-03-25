@@ -19,21 +19,22 @@ def setup_logging():
 
 @dataclass
 class DemoConfig:
-    """Demo training config: 3 epochs, 4k samples for quick results."""
-    max_seq_len: int = 256
-    batch_size: int = 16
-    max_epochs: int = 3  # Quick demo: 3 epochs instead of 30
-    learning_rate: float = 5e-5
-    warmup_steps: int = 100
+    """Windows CPU optimization: 2 epochs, 2k samples, batch_size=4."""
+    max_seq_len: int = 200  # Reduced from 256 for CPU memory
+    batch_size: int = 4  # CPU-safe batch size (i7-8th gen + 16GB)
+    max_epochs: int = 2  # 2 quick epochs (~1-2 hours on i7-8th)
+    learning_rate: float = 3e-5  # Slightly lower for stability
+    warmup_steps: int = 50
     label_smoothing: float = 0.1
     dropout: float = 0.3
     optimizer: str = "adamw"
-    fp16: bool = True
-    beam_size: int = 5
-    sample_size: int = 4000  # Use only 4k examples for demo (instead of 16k)
+    fp16: bool = False  # Disable on CPU (not beneficial)
+    beam_size: int = 4  # Reduce beam search for speed
+    sample_size: int = 2000  # Demo on 2k examples
+    gradient_accumulation_steps: int = 2  # Simulate batch_size=8 with mem of 4
 
 
-def run_evaluation(model, tokenizer, src_path, tgt_path, device, cfg, max_samples=500):
+def run_evaluation(model, tokenizer, src_path, tgt_path, device, cfg, max_samples=100):
     """Evaluate model on dev set using BLEU and chrF++."""
     references = [l.strip() for l in tgt_path.open("r", encoding="utf-8") if l.strip()]
     sources = [l.strip() for l in src_path.open("r", encoding="utf-8") if l.strip()]
